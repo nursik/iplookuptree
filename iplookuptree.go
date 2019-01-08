@@ -4,13 +4,13 @@ import (
 	"encoding/binary"
 	"math"
 	"net"
-	"sync"
 )
 
 // bitslen contstant must be a power of 2. It indicates how much space
-// will be taken by a tree and maximum number of hops (treenode accesses). When bitslen is 4
-// maximum number of hops will be 32 / bitslen = 8 and one node takes
-// 1<< bitslen * (sizeof SID and *treenode) = 256 bytes
+// will be taken by a tree and maximum number of hops (treenode accesses). When bitslen is 4,
+// the maximum number of hops will be 32 / bitslen and one node takes
+// 1<< bitslen * (sizeof SID and *treenode). So current constant (4) will make maximum 8 hops and
+// every node consumes 256 bytes.
 const bitslen = 4
 
 // SID type contains a list of corresponding service indexes.
@@ -23,7 +23,6 @@ type SID uint64
 
 type Tree struct {
 	root *treenode
-	mt *sync.Mutex
 }
 
 type treenode struct {
@@ -44,7 +43,7 @@ func (node *treenode) isEmpty() bool {
 
 // New creates new IP subnet tree. It only works with IP v4
 func New() *Tree {
-	tree := &Tree{&treenode{}, &sync.Mutex{}}
+	tree := &Tree{&treenode{}}
 	return tree
 }
 
@@ -55,7 +54,6 @@ func New() *Tree {
 // This method does not compress subnets - if you put 1.1.1.1/24 and 1.1.1.1/23
 // of the same service, it will hold both subnets.
 func (tree *Tree) Add(service SID, ipnet net.IPNet) {
-	tree.mt.Lock()
 	node := tree.root
 
 	prefixLen, _ := ipnet.Mask.Size()
@@ -82,7 +80,6 @@ func (tree *Tree) Add(service SID, ipnet net.IPNet) {
 		}
 		curLen += bitslen
 	}
-	tree.mt.Unlock()
 }
 
 // Get returns SID which corresponds to this ip v4
@@ -117,7 +114,6 @@ func getSubstring(ipv4 []byte, index uint8) uint32 {
 // and remove the same subnet. However, it will lead to undefined behaviour, if
 // you remove subnet which was not added before.
 func (tree *Tree) Remove(service SID, ipnet net.IPNet) {
-	tree.mt.Lock()
 	reversedService := math.MaxUint64 ^ service
 
 	node := tree.root
@@ -161,5 +157,4 @@ func (tree *Tree) Remove(service SID, ipnet net.IPNet) {
 			parent.ptrs[ind] = nil
 		}
 	}
-	tree.mt.Unlock()
 }
